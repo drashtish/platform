@@ -1,4 +1,4 @@
-﻿"""
+"""
 UIDAI Data Pipeline Runner
 ===========================
 Converts raw CSV data into certified analytical datasets.
@@ -69,6 +69,16 @@ def run_pipeline(force: bool = False):
     print("\n[STAGE 2] Computing risk indices...")
     risk_df = build_risk_dataframe.__wrapped__(df_enrol, df_bio, df_demo)
     print(f"  Master dataset: {len(risk_df):,} districts")
+    
+    if len(risk_df) == 0:
+        print("\n  ⚠️ WARNING: No valid data found. Check that:")
+        print(f"    - Enrollment data exists in: {DATA_BASE / 'api_data_aadhar_enrolment'}")
+        print(f"    - Biometric data exists in: {DATA_BASE / 'api_data_aadhar_biometric'}")
+        print(f"    - Demographic data exists in: {DATA_BASE / 'api_data_aadhar_demographic'}")
+        print("    - CSV files contain 'state' and 'district' columns")
+        print("\n  Pipeline aborted: No data to process.")
+        return None
+    
     print(f"  States: {risk_df['state'].nunique()}")
     
     # Stage 3: Save certified parquet files
