@@ -152,8 +152,27 @@ st.markdown("""
     
     /* ========== HIDE DEFAULT ELEMENTS ========== */
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     #MainMenu {visibility: hidden;}
+    
+    /* Hide header but keep sidebar collapse button visible */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
+    
+    /* Show sidebar collapse/expand button */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        display: block !important;
+        background-color: rgba(26, 41, 66, 0.9) !important;
+        border-radius: 8px !important;
+        border: 1px solid rgba(212, 175, 55, 0.4) !important;
+    }
+    
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="collapsedControl"] svg {
+        color: #d4af37 !important;
+    }
     
     /* ========== SIDEBAR - INSTITUTIONAL STYLE ========== */
     [data-testid="stSidebar"] {
