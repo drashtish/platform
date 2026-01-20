@@ -780,12 +780,70 @@ def main():
     st.session_state['df_bio'] = df_bio
     st.session_state['stats'] = stats
     
+    # =================================================================
+    # EXPORT FUNCTIONALITY
+    # =================================================================
+    if st.session_state.get('export_mode', False):
+        st.markdown("""
+        <div style="background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(26, 41, 66, 0.8) 100%);
+                    padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #10b981;">
+            <h3 style="color: #10b981; margin: 0 0 15px 0;">📥 Export Dashboard Data</h3>
+            <p style="color: #a0aec0; margin-bottom: 15px;">Download data as CSV files for offline analysis.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.download_button(
+                label="📊 Risk Analysis",
+                data=risk_df.to_csv(index=False),
+                file_name="uidai_risk_analysis.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col2:
+            st.download_button(
+                label="📝 Enrollment Data",
+                data=df_enrol.to_csv(index=False),
+                file_name="uidai_enrollment.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col3:
+            st.download_button(
+                label="👤 Demographic Data",
+                data=df_demo.to_csv(index=False),
+                file_name="uidai_demographic.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col4:
+            st.download_button(
+                label="🔐 Biometric Data",
+                data=df_bio.to_csv(index=False),
+                file_name="uidai_biometric.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        col_close = st.columns([1, 2, 1])[1]
+        with col_close:
+            if st.button("✖ CLOSE EXPORT PANEL", use_container_width=True, type="primary"):
+                del st.session_state['export_mode']
+                st.rerun()
+        
+        st.markdown("---")
+    
     # Render header banner
     render_header(stats)
     
     # Render selected dashboard
     if "National" in selected_dashboard:
-        render_national_dashboard(stats, risk_df)
+        render_national_dashboard(stats, risk_df, df_enrol=df_enrol, df_demo=df_demo, df_bio=df_bio)
         
     elif "Enrolment" in selected_dashboard or "Enrollment" in selected_dashboard:
         render_enrolment_dashboard(df_enrol, risk_df)
