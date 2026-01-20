@@ -1,4 +1,4 @@
-﻿"""
+"""
 ================================================================================
 UIDAI GOVERNANCE INTELLIGENCE DASHBOARD - DATA PREPROCESSING MODULE
 ================================================================================
@@ -554,15 +554,15 @@ def build_risk_dataframe(_df_enrol, _df_bio, _df_demo):
     
     # Enrollment aggregation
     enrol_agg = pd.DataFrame()
-    if len(df_enrol) > 0 and all(c in df_enrol.columns for c in group_cols):
-        enrol_agg = df_enrol.groupby(group_cols).agg({
+    if len(_df_enrol) > 0 and all(c in _df_enrol.columns for c in group_cols):
+        enrol_agg = _df_enrol.groupby(group_cols).agg({
             'total_enrollment': 'sum'
         }).reset_index()
         
         # Add center count if available
-        if 'enrolment_agency' in df_enrol.columns or 'agency' in df_enrol.columns:
-            agency_col = 'enrolment_agency' if 'enrolment_agency' in df_enrol.columns else 'agency'
-            center_counts = df_enrol.groupby(group_cols)[agency_col].nunique().reset_index()
+        if 'enrolment_agency' in _df_enrol.columns or 'agency' in _df_enrol.columns:
+            agency_col = 'enrolment_agency' if 'enrolment_agency' in _df_enrol.columns else 'agency'
+            center_counts = _df_enrol.groupby(group_cols)[agency_col].nunique().reset_index()
             center_counts.columns = ['state', 'district', 'center_count']
             enrol_agg = enrol_agg.merge(center_counts, on=group_cols, how='left')
         else:
@@ -570,15 +570,15 @@ def build_risk_dataframe(_df_enrol, _df_bio, _df_demo):
     
     # Biometric aggregation
     bio_agg = pd.DataFrame()
-    if len(df_bio) > 0 and all(c in df_bio.columns for c in group_cols):
-        bio_agg = df_bio.groupby(group_cols).agg({
+    if len(_df_bio) > 0 and all(c in _df_bio.columns for c in group_cols):
+        bio_agg = _df_bio.groupby(group_cols).agg({
             'total_biometric': 'sum'
         }).reset_index()
     
     # Demographic aggregation
     demo_agg = pd.DataFrame()
-    if len(df_demo) > 0 and all(c in df_demo.columns for c in group_cols):
-        demo_agg = df_demo.groupby(group_cols).agg({
+    if len(_df_demo) > 0 and all(c in _df_demo.columns for c in group_cols):
+        demo_agg = _df_demo.groupby(group_cols).agg({
             'total_demo': 'sum'
         }).reset_index()
     
