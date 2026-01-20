@@ -1000,7 +1000,7 @@ def main():
         col1, col_vs, col2 = st.columns([3, 1, 3])
         
         with col1:
-            st.markdown(f"###{state1}")
+            st.markdown(f"{state1}")
             if len(state1_data) > 0:
                 m1, m2 = st.columns(2)
                 with m1:
@@ -1016,7 +1016,7 @@ def main():
             st.markdown("<div style='text-align: center; padding-top: 50px;'><h1 style='color: #8b5cf6;'>VS</h1></div>", unsafe_allow_html=True)
         
         with col2:
-            st.markdown(f"###{state2}")
+            st.markdown(f"{state2}")
             if len(state2_data) > 0:
                 m1, m2 = st.columns(2)
                 with m1:
