@@ -1,4 +1,4 @@
-﻿"""
+"""
 ================================================================================
 UIDAI NATIONAL COMMAND CENTER - EXECUTIVE OVERVIEW
 ================================================================================
@@ -54,6 +54,322 @@ UIDAI_COLORS = {
     'white': '#ffffff',
     'muted': '#a0aec0'
 }
+
+# Region mapping for trivariate analysis (matching notebook)
+REGION_MAPPING = {
+    'Andhra Pradesh': 'South', 'Telangana': 'South', 'Karnataka': 'South', 
+    'Tamil Nadu': 'South', 'Kerala': 'South', 'Puducherry': 'South',
+    'Maharashtra': 'West', 'Gujarat': 'West', 'Goa': 'West',
+    'Rajasthan': 'North', 'Uttar Pradesh': 'North', 'Punjab': 'North', 
+    'Haryana': 'North', 'Himachal Pradesh': 'North', 'Uttarakhand': 'North', 
+    'NCT of Delhi': 'North', 'Jammu and Kashmir': 'North', 'Ladakh': 'North', 'Chandigarh': 'North',
+    'Madhya Pradesh': 'Central', 'Chhattisgarh': 'Central',
+    'Bihar': 'East', 'Jharkhand': 'East', 'West Bengal': 'East', 'Odisha': 'East',
+    'Assam': 'Northeast', 'Meghalaya': 'Northeast', 'Manipur': 'Northeast', 
+    'Mizoram': 'Northeast', 'Nagaland': 'Northeast', 'Tripura': 'Northeast', 
+    'Arunachal Pradesh': 'Northeast', 'Sikkim': 'Northeast',
+    'Andaman and Nicobar Islands': 'Islands', 'Lakshadweep': 'Islands',
+    'Dadra and Nagar Haveli and Daman and Diu': 'West'
+}
+
+
+# =============================================================================
+# TRIVARIATE ANALYSIS FUNCTIONS - Extracted from Notebook Section 4.6.3
+# =============================================================================
+
+def prepare_trivariate_data(df_enrol: pd.DataFrame, df_demo: pd.DataFrame, df_bio: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare unified district-level data for trivariate analysis.
+    
+    This function replicates the exact logic from notebook Section 4.6.3:
+    - Aggregate enrollment, demographic, biometric data at district level
+    - Merge into unified dataset
+    - Calculate derived ratios
+    
+    Returns:
+        pd.DataFrame: Unified trivariate dataset with district-level metrics
+    """
+    epsilon = 1e-6
+    
+    # Aggregate enrollment at district level
+    if len(df_enrol) > 0 and 'state' in df_enrol.columns and 'district' in df_enrol.columns:
+        enroll_agg = df_enrol.groupby(['state', 'district']).agg({
+            'total_enrollment': 'sum',
+            'child_enrollment': 'sum' if 'child_enrollment' in df_enrol.columns else 'count',
+            'adult_enrollment': 'sum' if 'adult_enrollment' in df_enrol.columns else 'count'
+        }).reset_index()
+        enroll_agg['region'] = enroll_agg['state'].map(REGION_MAPPING).fillna('Other')
+    else:
+        enroll_agg = pd.DataFrame(columns=['state', 'district', 'total_enrollment', 'child_enrollment', 'adult_enrollment', 'region'])
+    
+    # Aggregate demographic at district level
+    if len(df_demo) > 0 and 'state' in df_demo.columns and 'district' in df_demo.columns:
+        demo_col = 'total_demo' if 'total_demo' in df_demo.columns else 'total_demographic'
+        demo_agg = df_demo.groupby(['state', 'district']).agg({
+            demo_col: 'sum'
+        }).reset_index()
+        demo_agg.columns = ['state', 'district', 'total_demo']
+    else:
+        demo_agg = pd.DataFrame(columns=['state', 'district', 'total_demo'])
+    
+    # Aggregate biometric at district level
+    if len(df_bio) > 0 and 'state' in df_bio.columns and 'district' in df_bio.columns:
+        bio_col = 'total_bio' if 'total_bio' in df_bio.columns else 'total_biometric'
+        bio_agg = df_bio.groupby(['state', 'district']).agg({
+            bio_col: 'sum',
+            'bio_child': 'sum' if 'bio_child' in df_bio.columns else 'count',
+            'bio_adult': 'sum' if 'bio_adult' in df_bio.columns else 'count'
+        }).reset_index()
+        if 'total_biometric' in bio_agg.columns:
+            bio_agg = bio_agg.rename(columns={'total_biometric': 'total_bio'})
+    else:
+        bio_agg = pd.DataFrame(columns=['state', 'district', 'total_bio', 'bio_child', 'bio_adult'])
+    
+    # Merge into unified trivariate dataset (matching notebook logic)
+    tri_data = enroll_agg.merge(demo_agg, on=['state', 'district'], how='outer')
+    tri_data = tri_data.merge(bio_agg, on=['state', 'district'], how='outer')
+    tri_data = tri_data.fillna(0)
+    
+    # Add region for rows that may have been added from demo/bio
+    if 'region' not in tri_data.columns or tri_data['region'].isna().any():
+        tri_data['region'] = tri_data['state'].map(REGION_MAPPING).fillna('Other')
+    
+    # Calculate derived ratios for trivariate analysis (exact notebook logic)
+    tri_data['bio_enrollment_ratio'] = tri_data['total_bio'] / (tri_data['total_enrollment'] + epsilon)
+    tri_data['demo_enrollment_ratio'] = tri_data['total_demo'] / (tri_data['total_enrollment'] + epsilon)
+    tri_data['child_ratio'] = tri_data['child_enrollment'] / (tri_data['total_enrollment'] + epsilon)
+    
+    return tri_data
+
+
+def render_trivariate_3d_scatter(tri_data: pd.DataFrame):
+    """
+    Render 3D scatter plot for trivariate analysis.
+    
+    Matches notebook visualization: Enrollment × Demographics × Biometrics
+    with region-based coloring and size encoding.
+    """
+    if len(tri_data) == 0:
+        st.warning("Insufficient data for trivariate visualization")
+        return
+    
+    # Get top 200 districts by enrollment for clarity (matching notebook)
+    plot_data = tri_data.nlargest(200, 'total_enrollment').copy()
+    
+    fig_3d = px.scatter_3d(
+        plot_data,
+        x='total_enrollment',
+        y='total_demo',
+        z='total_bio',
+        color='region',
+        size='total_enrollment',
+        size_max=30,
+        hover_name='district',
+        hover_data=['state', 'total_enrollment', 'total_demo', 'total_bio'],
+        title='<b>Trivariate Analysis: Enrollment vs Demographics vs Biometrics</b><br><sub>Color: Region | Size: Enrollment Volume</sub>',
+        labels={
+            'total_enrollment': 'Total Enrollment',
+            'total_demo': 'Demographic Updates',
+            'total_bio': 'Biometric Verifications'
+        },
+        color_discrete_sequence=px.colors.qualitative.Set2
+    )
+    
+    fig_3d.update_layout(
+        scene=dict(
+            xaxis=dict(title=dict(text='Total Enrollment', font=dict(color='white')), tickfont=dict(color='white'), gridcolor='rgba(255,255,255,0.1)'),
+            yaxis=dict(title=dict(text='Demographic Updates', font=dict(color='white')), tickfont=dict(color='white'), gridcolor='rgba(255,255,255,0.1)'),
+            zaxis=dict(title=dict(text='Biometric Verifications', font=dict(color='white')), tickfont=dict(color='white'), gridcolor='rgba(255,255,255,0.1)'),
+            bgcolor='rgba(12, 25, 41, 0.9)'
+        ),
+        height=550,
+        paper_bgcolor='rgba(0,0,0,0)',
+        legend=dict(font=dict(color='white'), bgcolor='rgba(26,41,66,0.8)'),
+        title=dict(font=dict(color='#d4af37', size=14))
+    )
+    
+    st.plotly_chart(fig_3d, use_container_width=True)
+
+
+def render_trivariate_region_summary(tri_data: pd.DataFrame):
+    """
+    Render region-wise summary statistics for trivariate analysis.
+    Matches notebook region-wise trivariate summary output.
+    """
+    if len(tri_data) == 0 or 'region' not in tri_data.columns:
+        return
+    
+    region_stats = tri_data.groupby('region').agg({
+        'total_enrollment': ['sum', 'mean'],
+        'total_demo': ['sum', 'mean'],
+        'total_bio': ['sum', 'mean'],
+        'district': 'count'
+    }).round(2)
+    
+    region_stats.columns = ['Enroll_Sum', 'Enroll_Mean', 'Demo_Sum', 'Demo_Mean', 'Bio_Sum', 'Bio_Mean', 'Districts']
+    region_stats = region_stats.reset_index()
+    region_stats = region_stats.sort_values('Enroll_Sum', ascending=False)
+    
+    # Format for display
+    display_df = region_stats.copy()
+    display_df['Enrollment'] = display_df['Enroll_Sum'].apply(lambda x: f"{x/1e6:.2f}M" if x >= 1e6 else f"{x/1e3:.1f}K")
+    display_df['Demographics'] = display_df['Demo_Sum'].apply(lambda x: f"{x/1e6:.2f}M" if x >= 1e6 else f"{x/1e3:.1f}K")
+    display_df['Biometrics'] = display_df['Bio_Sum'].apply(lambda x: f"{x/1e6:.2f}M" if x >= 1e6 else f"{x/1e3:.1f}K")
+    
+    # Create bar chart for regional comparison
+    fig = go.Figure()
+    
+    # Normalize values for comparison (matching notebook logic)
+    for col in ['Enroll_Sum', 'Demo_Sum', 'Bio_Sum']:
+        region_stats[f'{col}_norm'] = region_stats[col] / region_stats[col].max() * 100
+    
+    x_pos = list(range(len(region_stats)))
+    width = 0.25
+    
+    fig.add_trace(go.Bar(
+        x=[p - width for p in x_pos], y=region_stats['Enroll_Sum_norm'],
+        name='Enrollment', marker_color='#3498db', width=width
+    ))
+    fig.add_trace(go.Bar(
+        x=x_pos, y=region_stats['Demo_Sum_norm'],
+        name='Demographic', marker_color='#e74c3c', width=width
+    ))
+    fig.add_trace(go.Bar(
+        x=[p + width for p in x_pos], y=region_stats['Bio_Sum_norm'],
+        name='Biometric', marker_color='#27ae60', width=width
+    ))
+    
+    fig.update_layout(
+        title=dict(text='Region Comparison: Normalized Metrics', font=dict(color='#d4af37', size=14)),
+        xaxis=dict(ticktext=region_stats['region'].tolist(), tickvals=x_pos, tickfont=dict(color='white'), tickangle=-45),
+        yaxis=dict(title=dict(text='Normalized Value (% of Max)', font=dict(color='white')), tickfont=dict(color='white'), gridcolor='rgba(255,255,255,0.1)'),
+        barmode='group',
+        height=400,
+        plot_bgcolor='rgba(26, 41, 66, 0.5)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        legend=dict(font=dict(color='white'), bgcolor='rgba(26,41,66,0.8)')
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Display summary table
+    st.markdown("#### Region-wise Activity Summary")
+    st.dataframe(
+        display_df[['region', 'Districts', 'Enrollment', 'Demographics', 'Biometrics']].rename(columns={'region': 'Region'}),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def render_trivariate_stats(tri_data: pd.DataFrame):
+    """
+    Render statistical insights for trivariate analysis.
+    Includes correlation analysis and outlier detection (matching notebook).
+    """
+    from scipy import stats
+    from scipy.spatial.distance import mahalanobis
+    
+    if len(tri_data) < 10:
+        st.warning("Insufficient data for statistical analysis")
+        return
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Correlation Analysis")
+        # Calculate correlations (matching notebook)
+        r_ed, p_ed = stats.pearsonr(tri_data['total_enrollment'], tri_data['total_demo'])
+        r_eb, p_eb = stats.pearsonr(tri_data['total_enrollment'], tri_data['total_bio'])
+        r_db, p_db = stats.pearsonr(tri_data['total_demo'], tri_data['total_bio'])
+        
+        corr_data = pd.DataFrame({
+            'Relationship': ['Enrollment ↔ Demographics', 'Enrollment ↔ Biometrics', 'Demographics ↔ Biometrics'],
+            'Correlation (r)': [f"{r_ed:.4f}", f"{r_eb:.4f}", f"{r_db:.4f}"],
+            'p-value': [f"{p_ed:.2e}", f"{p_eb:.2e}", f"{p_db:.2e}"],
+            'Significance': ['✅ Significant' if p < 0.05 else '❌ Not Significant' for p in [p_ed, p_eb, p_db]]
+        })
+        st.dataframe(corr_data, use_container_width=True, hide_index=True)
+    
+    with col2:
+        st.markdown("#### Trivariate Outlier Detection")
+        
+        # Calculate Mahalanobis distance (matching notebook)
+        tri_features = tri_data[['total_enrollment', 'total_demo', 'total_bio']].copy()
+        tri_features = tri_features.replace([np.inf, -np.inf], np.nan).dropna()
+        
+        if len(tri_features) > 10:
+            mean = tri_features.mean()
+            cov = tri_features.cov()
+            
+            try:
+                cov_inv = np.linalg.inv(cov)
+                tri_data_clean = tri_data.loc[tri_features.index].copy()
+                tri_data_clean['mahalanobis'] = tri_features.apply(
+                    lambda x: mahalanobis(x, mean, cov_inv), axis=1
+                )
+                
+                # Identify outliers (Mahalanobis > 3)
+                outliers = tri_data_clean[tri_data_clean['mahalanobis'] > 3]
+                
+                st.markdown(f"**Districts analyzed:** {len(tri_data_clean)}")
+                st.markdown(f"**Outliers detected (Mahalanobis > 3):** {len(outliers)}")
+                
+                if len(outliers) > 0:
+                    top_outliers = outliers.nlargest(5, 'mahalanobis')[['state', 'district', 'mahalanobis']]
+                    top_outliers['mahalanobis'] = top_outliers['mahalanobis'].round(2)
+                    top_outliers.columns = ['State', 'District', 'Mahalanobis Score']
+                    st.dataframe(top_outliers, use_container_width=True, hide_index=True)
+            except:
+                st.info("Could not compute Mahalanobis distance (singular covariance matrix)")
+
+
+def render_trivariate_analysis(df_enrol: pd.DataFrame, df_demo: pd.DataFrame, df_bio: pd.DataFrame):
+    """
+    Main function to render complete trivariate analysis section.
+    Orchestrates all trivariate visualizations matching notebook Section 4.6.3.
+    """
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+                padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; border-left: 4px solid #8b5cf6;">
+        <div style="color: #8b5cf6; font-size: 11px; font-weight: 700; letter-spacing: 1px;">▌ TRIVARIATE ANALYSIS</div>
+        <div style="color: #e2e8f0; font-size: 13px; margin-top: 4px;">
+            Multi-dimensional district analysis: Enrollment × Demographics × Biometrics. 
+            Each point represents one district–state pair.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Prepare trivariate data (using exact notebook logic)
+    tri_data = prepare_trivariate_data(df_enrol, df_demo, df_bio)
+    
+    if len(tri_data) == 0:
+        st.warning("No data available for trivariate analysis")
+        return
+    
+    st.markdown(f"**Unified Dataset:** {len(tri_data)} districts across {tri_data['state'].nunique()} states/UTs")
+    
+    # 3D Scatter Plot
+    st.markdown("### 3D District Activity Distribution")
+    render_trivariate_3d_scatter(tri_data)
+    
+    st.markdown("---")
+    
+    # Region Summary
+    st.markdown("### Regional Trivariate Comparison")
+    render_trivariate_region_summary(tri_data)
+    
+    st.markdown("---")
+    
+    # Statistical Insights
+    st.markdown("### Statistical Insights")
+    with st.expander("Methodology: Trivariate Statistical Analysis", expanded=False):
+        st.markdown("""
+        **Correlation Analysis:** Pearson correlation coefficients between enrollment, demographic, and biometric metrics.
+        
+        **Outlier Detection:** Mahalanobis distance identifies districts with unusual combinations of all three metrics.
+        Districts with Mahalanobis > 3 are flagged as potential anomalies requiring governance attention.
+        """)
+    render_trivariate_stats(tri_data)
 
 
 def render_executive_kpis(stats: Dict, risk_df: pd.DataFrame):
@@ -668,8 +984,10 @@ def render_aesi_heatmap(risk_df: pd.DataFrame):
     st.plotly_chart(fig2, use_container_width=True)
 
 
-def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list = None):
-    """Main function to render national command center dashboard."""
+def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list = None,
+                               df_enrol: pd.DataFrame = None, df_demo: pd.DataFrame = None, 
+                               df_bio: pd.DataFrame = None):
+    """Main function to render national command center dashboard with trivariate analysis."""
     
     # Command Center Header
     critical_count = len(risk_df[risk_df['AESI'] > 75]) if 'AESI' in risk_df.columns else 0
@@ -721,8 +1039,8 @@ def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list
     
     st.markdown("---")
     
-    # Reorganized tabs: MAP FIRST + Current State vs Predictive Intelligence
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Composite Map", "State Rankings", "Quadrants", "Priority Action", "Analytics", "Predictive"])
+    # Reorganized tabs: MAP FIRST + Current State vs Predictive Intelligence + Trivariate
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Composite Map", "Trivariate", "State Rankings", "Quadrants", "Priority Action", "Analytics", "Predictive"])
     
     with tab1:
         # MAP-FIRST: Composite Risk Map
@@ -738,6 +1056,13 @@ def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list
         render_regional_treemap(risk_df)
     
     with tab2:
+        # TRIVARIATE ANALYSIS - From notebook Section 4.6.3
+        if df_enrol is not None and df_demo is not None and df_bio is not None:
+            render_trivariate_analysis(df_enrol, df_demo, df_bio)
+        else:
+            st.warning("Trivariate analysis requires enrollment, demographic, and biometric data.")
+    
+    with tab3:
         # State Rankings with situational context
         st.markdown("""
         <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
@@ -753,7 +1078,7 @@ def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list
         # State Risk Ranking Bar Chart
         render_state_risk_ranking(risk_df)
     
-    with tab3:
+    with tab4:
         # Quadrants with collapsible methodology
         st.markdown("""
         <div style="background: rgba(139, 92, 246, 0.1); border-left: 4px solid #8b5cf6; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
@@ -774,7 +1099,7 @@ def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list
         
         render_risk_capacity_quadrant(risk_df)
     
-    with tab4:
+    with tab5:
         # PRIORITY ACTION TABLE - Operational tasking
         st.markdown("""
         <div style="background: linear-gradient(90deg, rgba(220, 38, 38, 0.15) 0%, rgba(26, 41, 65, 0.8) 100%);
@@ -814,7 +1139,7 @@ def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list
         st.markdown("### District Performance Leaderboard")
         render_district_leaderboard(risk_df)
     
-    with tab5:
+    with tab6:
         # Analytics with collapsible methodology
         st.markdown("""
         <div style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
@@ -841,7 +1166,7 @@ def render_national_dashboard(stats: Dict, risk_df: pd.DataFrame, insights: list
         st.markdown("---")
         render_risk_distribution_charts(risk_df)
     
-    with tab6:
+    with tab7:
         # PREDICTIVE PULSE
         st.markdown("""
         <div style="background: linear-gradient(90deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%); 
