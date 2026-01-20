@@ -438,6 +438,59 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================================================================
+# LIGHT THEME CSS (Applied dynamically based on user selection)
+# =============================================================================
+def apply_theme():
+    """Apply light theme CSS if selected by user."""
+    if st.session_state.get('theme') == 'light':
+        st.markdown("""
+        <style>
+            /* ========== LIGHT THEME OVERRIDES ========== */
+            .stApp {
+                background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 50%, #f5f7fa 100%) !important;
+            }
+            
+            [data-testid="stSidebar"] {
+                background: linear-gradient(180deg, #ffffff 0%, #f0f2f5 50%, #ffffff 100%) !important;
+                border-right: 1px solid #d4af37 !important;
+            }
+            
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h1,
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3,
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h4 {
+                color: #1a2942 !important;
+            }
+            
+            h1, h2, h3 { color: #1a2942 !important; }
+            p { color: #4a5568 !important; }
+            
+            [data-testid="stMetricValue"] { color: #1a2942 !important; }
+            [data-testid="stMetricLabel"] { color: #4a5568 !important; }
+            
+            .stTabs [data-baseweb="tab-list"] {
+                background-color: rgba(255, 255, 255, 0.9) !important;
+                border: 1px solid #d4af37 !important;
+            }
+            
+            .stTabs [data-baseweb="tab"] {
+                color: #1a2942 !important;
+                background-color: rgba(240, 242, 245, 0.8) !important;
+            }
+            
+            .stDataFrame thead th {
+                background-color: #f0f2f5 !important;
+                color: #1a2942 !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+
+
+
+
+
+# =============================================================================
 # DATA LOADING - CERTIFIED PARQUET ONLY (THREE-LAYER ARCHITECTURE)
 # =============================================================================
 
@@ -546,6 +599,7 @@ def render_sidebar():
         </div>
         """, unsafe_allow_html=True)
         
+        
         # Dashboard selection with icons
         st.markdown("####  COMMAND CENTER")
         
@@ -563,6 +617,44 @@ def render_sidebar():
         
         
         st.markdown("---")
+        
+        # =================================================================
+        # 📊 COMPARE MODE
+        # =================================================================
+        st.markdown("#### COMPARE MODE")
+        compare_mode = st.checkbox("Enable Compare", value=st.session_state.get('compare_mode', False))
+        st.session_state['compare_mode'] = compare_mode
+        
+        if compare_mode:
+            st.markdown("<p style='color: #a0aec0; font-size: 11px;'>Select 2 states to compare:</p>", unsafe_allow_html=True)
+            
+            # Get unique states from session state (will be populated after data loads)
+            all_states = st.session_state.get('all_states', ['Loading...'])
+            
+            compare_state_1 = st.selectbox(
+                "State 1",
+                options=all_states,
+                key="compare_state_1",
+                label_visibility="collapsed"
+            )
+            
+            compare_state_2 = st.selectbox(
+                "State 2", 
+                options=all_states,
+                key="compare_state_2",
+                index=min(1, len(all_states)-1),
+                label_visibility="collapsed"
+            )
+            
+            st.session_state['compare_selections'] = (compare_state_1, compare_state_2)
+            
+            if compare_state_1 and compare_state_2 and compare_state_1 != compare_state_2:
+                st.success(f"Comparing: {compare_state_1} vs {compare_state_2}")
+            elif compare_state_1 == compare_state_2:
+                st.warning("Select different states")
+        
+        st.markdown("---")
+        
         
         # Control Panel
         st.markdown("#### CONTROLS")
@@ -799,6 +891,25 @@ def main():
     st.session_state['df_bio'] = df_bio
     st.session_state['stats'] = stats
     
+    
+    # Populate states list for Compare Mode
+    if 'state' in risk_df.columns:
+        st.session_state['all_states'] = sorted(risk_df['state'].unique().tolist())
+    
+    
+    # =================================================================
+    
+    # =================================================================
+    # COMPARE MODE - Set flag to show dedicated comparison page
+    # =================================================================
+    show_compare_page = False
+    if st.session_state.get('compare_mode', False):
+        compare_selections = st.session_state.get('compare_selections')
+        if compare_selections and len(compare_selections) == 2:
+            state1, state2 = compare_selections
+            if state1 != state2 and state1 != 'Loading...' and state2 != 'Loading...':
+                show_compare_page = True
+    
     # =================================================================
     # EXPORT FUNCTIONALITY
     # =================================================================
@@ -860,8 +971,113 @@ def main():
     # Render header banner
     render_header(stats)
     
-    # Render selected dashboard
-    if "National" in selected_dashboard:
+    # =================================================================
+    # DEDICATED COMPARISON PAGE
+    # =================================================================
+    if show_compare_page:
+        state1, state2 = st.session_state.get('compare_selections', ('', ''))
+        
+        # Header with Back to Home button
+        col_back, col_title = st.columns([1, 5])
+        with col_back:
+            if st.button("Back to Home", use_container_width=True, type="primary"):
+                st.session_state['compare_mode'] = False
+                st.rerun()
+        
+        st.markdown(f"""
+        <div style="background: linear-gradient(90deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
+                    padding: 20px; border-radius: 12px; margin: 15px 0 25px 0; border: 1px solid #8b5cf6;">
+            <h2 style="color: #8b5cf6; margin: 0;">State Comparison</h2>
+            <p style="color: #a0aec0; margin: 5px 0 0 0;">{state1} vs {state2}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Get data for both states
+        state1_data = risk_df[risk_df['state'] == state1] if 'state' in risk_df.columns else pd.DataFrame()
+        state2_data = risk_df[risk_df['state'] == state2] if 'state' in risk_df.columns else pd.DataFrame()
+        
+        # Side-by-side metrics
+        col1, col_vs, col2 = st.columns([3, 1, 3])
+        
+        with col1:
+            st.markdown(f"###{state1}")
+            if len(state1_data) > 0:
+                m1, m2 = st.columns(2)
+                with m1:
+                    st.metric("Districts", len(state1_data))
+                    st.metric("Avg AESI", f"{state1_data['AESI'].mean():.1f}" if 'AESI' in state1_data.columns else "N/A")
+                with m2:
+                    st.metric("Critical", len(state1_data[state1_data['AESI'] > 75]) if 'AESI' in state1_data.columns else 0)
+                    st.metric("High Risk", len(state1_data[state1_data['AESI'] > 50]) if 'AESI' in state1_data.columns else 0)
+            else:
+                st.warning("No data available")
+        
+        with col_vs:
+            st.markdown("<div style='text-align: center; padding-top: 50px;'><h1 style='color: #8b5cf6;'>VS</h1></div>", unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"###{state2}")
+            if len(state2_data) > 0:
+                m1, m2 = st.columns(2)
+                with m1:
+                    st.metric("Districts", len(state2_data))
+                    st.metric("Avg AESI", f"{state2_data['AESI'].mean():.1f}" if 'AESI' in state2_data.columns else "N/A")
+                with m2:
+                    st.metric("Critical", len(state2_data[state2_data['AESI'] > 75]) if 'AESI' in state2_data.columns else 0)
+                    st.metric("High Risk", len(state2_data[state2_data['AESI'] > 50]) if 'AESI' in state2_data.columns else 0)
+            else:
+                st.warning("No data available")
+        
+        st.markdown("---")
+        
+        # Comparison bar chart
+        if len(state1_data) > 0 and len(state2_data) > 0:
+            import plotly.graph_objects as go
+            
+            metrics = ['Districts', 'Avg AESI', 'Critical Districts', 'High Risk Districts']
+            state1_vals = [
+                len(state1_data),
+                state1_data['AESI'].mean() if 'AESI' in state1_data.columns else 0,
+                len(state1_data[state1_data['AESI'] > 75]) if 'AESI' in state1_data.columns else 0,
+                len(state1_data[state1_data['AESI'] > 50]) if 'AESI' in state1_data.columns else 0
+            ]
+            state2_vals = [
+                len(state2_data),
+                state2_data['AESI'].mean() if 'AESI' in state2_data.columns else 0,
+                len(state2_data[state2_data['AESI'] > 75]) if 'AESI' in state2_data.columns else 0,
+                len(state2_data[state2_data['AESI'] > 50]) if 'AESI' in state2_data.columns else 0
+            ]
+            
+            fig = go.Figure(data=[
+                go.Bar(name=state1, x=metrics, y=state1_vals, marker_color='#8b5cf6'),
+                go.Bar(name=state2, x=metrics, y=state2_vals, marker_color='#3b82f6')
+            ])
+            fig.update_layout(
+                barmode='group',
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(26, 41, 66, 0.5)',
+                font=dict(color='white'),
+                legend=dict(font=dict(color='white'))
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # District tables
+        st.markdown("### 📋 District Details")
+        tab1, tab2 = st.tabs([f"{state1} Districts", f"{state2} Districts"])
+        
+        with tab1:
+            if len(state1_data) > 0:
+                display_cols = ['district', 'AESI'] + [c for c in ['total_enrollment', 'total_activity'] if c in state1_data.columns]
+                st.dataframe(state1_data[display_cols].sort_values('AESI', ascending=False) if 'AESI' in state1_data.columns else state1_data, use_container_width=True)
+        
+        with tab2:
+            if len(state2_data) > 0:
+                display_cols = ['district', 'AESI'] + [c for c in ['total_enrollment', 'total_activity'] if c in state2_data.columns]
+                st.dataframe(state2_data[display_cols].sort_values('AESI', ascending=False) if 'AESI' in state2_data.columns else state2_data, use_container_width=True)
+    
+    # Render selected dashboard (only if not in compare page)
+    elif "National" in selected_dashboard:
         render_national_dashboard(stats, risk_df, df_enrol=df_enrol, df_demo=df_demo, df_bio=df_bio)
         
     elif "Enrolment" in selected_dashboard or "Enrollment" in selected_dashboard:
@@ -874,7 +1090,6 @@ def main():
         render_demographic_dashboard(df_demo, risk_df)
         
     elif "Policy" in selected_dashboard:
-        # Policy Intelligence Dashboard
         render_policy_dashboard(risk_df, df_enrol, df_bio, stats)
     
     # Auto-refresh mechanism
